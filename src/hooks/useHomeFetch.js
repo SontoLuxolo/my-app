@@ -7,7 +7,6 @@ const initialState = {
     results: [],
     total_pages: 0,
     total_results: 0
-
 }
 
 export const useHomeFetch = () => {
