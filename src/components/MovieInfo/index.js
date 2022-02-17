@@ -11,10 +11,10 @@ import { Wrapper, Content, Text} from './MovieInfo.styles';
 const MovieInfo = ({ movie }) => (
     <Wrapper backdrop={movie.backdrop_path}>
         <Content>
-            <Thumb>
-                image={movie.poster_path ? `url(${IMAGE_BASE_URL}${POSTER_SIZE}${movie.poster_path})` : NoImage };
-                clickable={false};
-            </Thumb>
+            <Thumb
+                image={movie.poster_path ? `${IMAGE_BASE_URL}${POSTER_SIZE}${movie.poster_path}` : NoImage }
+                clickable={false}
+            />
             <Text>
                 <h1>{movie.title}</h1>
                 <h3>SYNOPSIS</h3>
