@@ -43,10 +43,12 @@ export const useMovieFetch = movieId => {
 
 
     }, [movieId]);
+
     useEffect(() => {
         fetchMovie();
     }, [movieId, fetchMovie]);
 
+    //  Write to Session Storage
     useEffect(() => {  
         sessionStorage.setItem(movieId, JSON.stringify(state))
 
