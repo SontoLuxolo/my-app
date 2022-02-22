@@ -26,7 +26,7 @@ export const useHomeFetch = () => {
             const movies = await API.fetchMovies(searchTerm, page);
             // console.log(movies);
 
-            setState(prev => ({
+            this.setState(prev => ({
                 ...movies,
                 results:
                     page > 1 ? [...prev.results, ...movies.results] : [...movies.results]

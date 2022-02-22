@@ -36,9 +36,7 @@ class Home extends Component {
     fetchMovies = async (page, searchTerm = "") => {
         try {
             this.setState({ error: false, loading: true });
-
             const movies = await API.fetchMovies(searchTerm, page);
-
             this.setState(prev => ({
                 ...prev,
                 movies: {
@@ -51,7 +49,6 @@ class Home extends Component {
         } catch (error) {
             this.setState({ error: true, loading: false });
         }
-        // setLoading(false);
     }
 
     handleSearch = searchTerm => {
@@ -101,10 +98,6 @@ class Home extends Component {
             
         )
     }
-
-
-
-
 }
 
 export default Home;
