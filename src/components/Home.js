@@ -1,103 +1,153 @@
-import React, { Component } from 'react';
-
-// config
-
+import React, { useState, useEffect, useCallback } from 'react';
 import { POSTER_SIZE, BACKDROP_SIZE, IMAGE_BASE_URL } from '../config';
-// Components
 import HeroImage from './HeroImage';
 import Grid from './Grid';
 import Thumb from './Thumb';
 import Spinner from './Spinner';
 import SearchBar from './SearchBar';
 import Button from './Button';
-// API 
 import API from '../API';
-// Hook
-// import { useHomeFetch } from '../hooks/useHomeFetch'
-// Image
-
 import NoImage from '../images/no_image.jpg';
+import { debounce } from 'lodash';
 
-const initialState = {
+// Initial state for movies
+const initialMoviesState = {
     page: 0,
     results: [],
     total_pages: 0,
-    total_results: 0
-}
-class Home extends Component {
-    state = {
-        movies: initialState,
-        searchTerm: '',
-        isLoadingMore: false,
-        loading: false,
-        error: false,
-    }
+    total_results: 0,
+};
 
-    fetchMovies = async (page, searchTerm = "") => {
+const Home = () => {
+    // Flattened state for better management
+    const [movies, setMovies] = useState(initialMoviesState);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [error, setError] = useState(null);
+
+    const fetchMovies = useCallback(async (page, term = '', signal) => {
         try {
-            this.setState({ error: false, loading: true });
-            const movies = await API.fetchMovies(searchTerm, page);
-            this.setState(prev => ({
-                ...prev,
-                movies: {
-                    ...movies,
-                    results:
-                        page > 1 ? [...prev.movies.results, ...movies.results] : [...movies.results]
-                },
-                loading: false,               
-            }))
+            setIsLoading(true);
+            setError(null);
+            const newMovies = await API.fetchMovies(term, page, { signal });
+            setMovies(prev => ({
+                ...newMovies,
+                results: page > 1 ? [...prev.results, ...newMovies.results] : newMovies.results,
+            }));
+            setIsLoading(false);
         } catch (error) {
-            this.setState({ error: true, loading: false });
+            if (error.name !== 'AbortError') {
+                setError('Failed to fetch movies. Please try again.');
+                setIsLoading(false);
+            }
         }
-    }
+    }, []);
 
-    handleSearch = searchTerm => {
-        this.setState({ movies: initialState, searchTerm},
-            this.fetchMovies(1, this.state.searchTerm)    
-        )
-    }
+    // Debounced search handler
+    const handleSearch = useCallback(
+        debounce((term) => {
+            setSearchTerm(term);
+            setMovies(initialMoviesState);
+            const controller = new AbortController();
+            fetchMovies(1, term, controller.signal);
+            return () => controller.abort();
+        }, 500),
+        [fetchMovies]
+    );
 
-    handleLoadMore = () => {
-        this.fetchMovies(this.state.movies.page + 1, this.state.searchTerm)
-    }
+    const handleLoadMore = useCallback(() => {
+        if (!isLoadingMore && !isLoading) {
+            setIsLoadingMore(true);
+            const controller = new AbortController();
+            fetchMovies(movies.page + 1, searchTerm, controller.signal).then(() => {
+                setIsLoadingMore(false);
+            });
+            return () => controller.abort();
+        }
+    }, [fetchMovies, movies.page, searchTerm, isLoadingMore, isLoading]);
 
-    componentDidMount(){
-        this.fetchMovies(1);
-    }
+    useEffect(() => {
+        let isMounted = true;
+        const controller = new AbortController();
 
-    render() {
-
-        const { searchTerm, movies, loading, error } = this.state;
-
-        if (error) return <div>Something went wrong</div>;
-        return (
-            <>
-                {!searchTerm && movies.results[0] ?
-                    <HeroImage 
-                        image={`${IMAGE_BASE_URL}${BACKDROP_SIZE}${movies.results[0].backdrop_path}`}
-                        title={movies.results[0].original_title}
-                        text={movies.results[0].overview}
-                    />
-                    : null
+        const fetchInitialMovies = async () => {
+            try {
+                setIsLoading(true);
+                setError(null);
+                const newMovies = await API.fetchMovies('', 1, { signal: controller.signal });
+                if (isMounted) {
+                    setMovies({
+                        ...newMovies,
+                        results: newMovies.results,
+                    });
+                    setIsLoading(false);
                 }
-                <SearchBar setSearchTerm={ this.handleSearch } />
-                <Grid header={searchTerm ? 'Search Result' : 'Popular Movies'}>
-                    {movies.results.map(movie => (
-    
-                        <Thumb 
-                            key={movie.id}
-                            clickable
-                            image={movie.poster_path ? IMAGE_BASE_URL + POSTER_SIZE + movie.poster_path : NoImage }
-                            movieId={movie.id}
-                        />
-                    ))}
-                </Grid>
-                {loading && <Spinner />}
-                {movies.page < movies.total_pages && !loading && (<Button text='Load More...' callback={this.handleLoadMore} />)}
-            </>
-            
-        )
+            } catch (error) {
+                if (isMounted && error.name !== 'AbortError') {
+                    setError('Failed to load initial movies. Please try again.');
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        fetchInitialMovies();
+
+        return () => {
+            isMounted = false;
+            controller.abort();
+        };
+    }, []);
+
+    if (error) {
+        return (
+            <div>
+                {error}
+                <Button
+                    text="Retry"
+                    callback={() => fetchMovies(1, searchTerm, new AbortController().signal)}
+                    role="button"
+                    aria-label="Retry fetching movies"
+                />
+            </div>
+        );
     }
-}
+
+    return (
+        <>
+            {movies.results[0]?.backdrop_path && !searchTerm && (
+                <HeroImage
+                    image={`${IMAGE_BASE_URL}${BACKDROP_SIZE}${movies.results[0].backdrop_path}`}
+                    title={movies.results[0].original_title}
+                    text={movies.results[0].overview}
+                />
+            )}
+            <SearchBar setSearchTerm={handleSearch} aria-label="Search movies" />
+            <Grid header={searchTerm ? 'Search Results' : 'Popular Movies'}>
+                {movies.results.map((movie, index) => (
+                    <Thumb
+                        key={`${movie.id}-${index}`}
+                        clickable
+                        image={movie.poster_path ? `${IMAGE_BASE_URL}${POSTER_SIZE}${movie.poster_path}` : NoImage}
+                        movieId={movie.id}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`View details for ${movie.original_title}`}
+                    />
+                ))}
+            </Grid>
+            {isLoading && <Spinner />}
+            {movies.page < movies.total_pages && !isLoading && (
+                <Button
+                    text="Load More"
+                    callback={handleLoadMore}
+                    disabled={isLoadingMore || isLoading}
+                    role="button"
+                    aria-label="Load more movies"
+                />
+            )}
+        </>
+    );
+};
 
 export default Home;
